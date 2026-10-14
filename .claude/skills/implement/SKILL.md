@@ -12,6 +12,6 @@ disable-model-invocation: true
 
 타입 검사는 수시로, 단일 테스트 파일은 수시로 실행하고, 전체 테스트 스위트는 마지막에 한 번 실행한다.
 
-작업을 마치면 Skill 도구로 "code-review"를 호출해 작업을 리뷰한다.
+작업을 마치면 Skill 도구로 "code-review-matt"를 호출해 작업을 리뷰한다.
 
 작업 내용을 현재 브랜치에 커밋한다.
