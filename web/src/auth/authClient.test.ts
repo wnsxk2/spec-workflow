@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createAuthClient, type AuthClient } from './authClient'
 import { createFakeServer, json } from './fakeServer'
 
@@ -136,6 +136,187 @@ describe('화면 인증 모듈', () => {
       auth = createAuthClient({ fetch: () => Promise.reject(new TypeError('Failed to fetch')) })
 
       await auth.restore()
+
+      expect(auth.getState()).toEqual({ status: 'logged-out', notice: '잠시 후 다시 시도해 주세요' })
+    })
+  })
+  describe('Access Token 만료 뒤 자동 복구', () => {
+    /** 로그인해 메모리에 Access Token(expired-access-token)을 둔 상태를 만든다. */
+    async function loggedIn() {
+      server.on('POST', '/api/auth/login', () => json(200, { accessToken: 'expired-access-token' }))
+      await auth.login('user@example.com', 'correct-password')
+    }
+
+    /** 새 Access Token을 붙인 요청에만 성공하는 보호된 요청. */
+    function protectedResource(method: string, path: string) {
+      server.on(method, path, (request) =>
+        request.headers.get('Authorization') === 'Bearer new-access-token'
+          ? json(200, { ok: true, received: request.body ?? null })
+          : json(401, {}),
+      )
+    }
+
+    function requestsTo(path: string) {
+      return server.requests.filter((request) => request.path === path)
+    }
+
+    function rotationCount() {
+      return requestsTo('/api/auth/refresh').length
+    }
+
+    it('정상 응답에는 토큰 교환을 하지 않는다', async () => {
+      server.on('POST', '/api/auth/login', () => json(200, { accessToken: 'new-access-token' }))
+      await auth.login('user@example.com', 'correct-password')
+      protectedResource('GET', '/api/me')
+
+      const response = await auth.authorizedFetch('/api/me')
+
+      expect(response.status).toBe(200)
+      expect(rotationCount()).toBe(0)
+    })
+
+    it('401을 받으면 토큰 교환을 한 번 하고, 원래 요청을 메서드와 본문 그대로 새 Access Token으로 한 번 다시 보낸다', async () => {
+      await loggedIn()
+      server.on('POST', '/api/auth/refresh', () => json(200, { accessToken: 'new-access-token' }))
+      protectedResource('POST', '/api/notes')
+
+      const response = await auth.authorizedFetch('/api/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: '메모' }),
+      })
+
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({ ok: true, received: { text: '메모' } })
+      expect(rotationCount()).toBe(1)
+      const notes = requestsTo('/api/notes')
+      expect(notes.map((request) => request.headers.get('Authorization'))).toEqual([
+        'Bearer expired-access-token',
+        'Bearer new-access-token',
+      ])
+      expect(notes[1].headers.get('Content-Type')).toBe('application/json')
+      expect(auth.getState()).toEqual({ status: 'logged-in' })
+    })
+
+    it('다시 보낸 요청도 401이면 토큰 교환과 재요청을 반복하지 않는다', async () => {
+      await loggedIn()
+      server.on('POST', '/api/auth/refresh', () => json(200, { accessToken: 'new-access-token' }))
+      server.on('GET', '/api/me', () => json(401, {}))
+
+      const response = await auth.authorizedFetch('/api/me')
+
+      expect(response.status).toBe(401)
+      expect(rotationCount()).toBe(1)
+      expect(requestsTo('/api/me')).toHaveLength(2)
+    })
+
+    it('한 탭에서 여러 요청이 동시에 401을 받으면 토큰 교환 하나를 함께 기다리고, 각 요청을 한 번씩 다시 보낸다', async () => {
+      await loggedIn()
+      let finishRotation!: () => void
+      server.on(
+        'POST',
+        '/api/auth/refresh',
+        () => new Promise((resolve) => (finishRotation = () => resolve(json(200, { accessToken: 'new-access-token' })))),
+      )
+      for (const path of ['/api/a', '/api/b', '/api/c']) protectedResource('GET', path)
+
+      const pending = ['/api/a', '/api/b', '/api/c'].map((path) => auth.authorizedFetch(path))
+      await vi.waitFor(() => expect(rotationCount()).toBe(1))
+      finishRotation()
+      const responses = await Promise.all(pending)
+
+      expect(responses.map((response) => response.status)).toEqual([200, 200, 200])
+      expect(rotationCount()).toBe(1)
+      for (const path of ['/api/a', '/api/b', '/api/c']) {
+        expect(requestsTo(path)).toHaveLength(2)
+      }
+    })
+
+    it('토큰 교환이 끝난 뒤에 도착한 이전 Access Token 요청의 401은 새로 교환하지 않고 새 Access Token으로 다시 보낸다', async () => {
+      await loggedIn()
+      server.on('POST', '/api/auth/refresh', () => json(200, { accessToken: 'new-access-token' }))
+      let answerSlowRequest!: () => void
+      server.on('GET', '/api/slow', (request) =>
+        request.headers.get('Authorization') === 'Bearer new-access-token'
+          ? json(200, {})
+          : new Promise((resolve) => (answerSlowRequest = () => resolve(json(401, {})))),
+      )
+      protectedResource('GET', '/api/me')
+
+      const slow = auth.authorizedFetch('/api/slow')
+      expect((await auth.authorizedFetch('/api/me')).status).toBe(200)
+      answerSlowRequest()
+
+      expect((await slow).status).toBe(200)
+      expect(rotationCount()).toBe(1)
+    })
+
+    it('Access Token 없이 보낸 요청의 401에는 토큰 교환을 하지 않는다', async () => {
+      server.on('GET', '/api/me', () => json(401, {}))
+
+      const response = await auth.authorizedFetch('/api/me')
+
+      expect(response.status).toBe(401)
+      expect(rotationCount()).toBe(0)
+    })
+
+    it('토큰 교환이 401이면 Access Token을 지우고 로그아웃 상태를 알리며, 기다리던 요청은 다시 보내지 않는다', async () => {
+      await loggedIn()
+      server.on('POST', '/api/auth/refresh', () => json(401, { message: '다시 로그인해 주세요' }))
+      for (const path of ['/api/a', '/api/b']) protectedResource('GET', path)
+      const notified: string[] = []
+      auth.subscribe(() => notified.push(auth.getState().status))
+
+      const responses = await Promise.all(['/api/a', '/api/b'].map((path) => auth.authorizedFetch(path)))
+
+      expect(responses.map((response) => response.status)).toEqual([401, 401])
+      expect(rotationCount()).toBe(1)
+      for (const path of ['/api/a', '/api/b']) {
+        expect(requestsTo(path)).toHaveLength(1)
+      }
+      expect(auth.getState()).toEqual({ status: 'logged-out' })
+      expect(notified).toEqual(['logged-out'])
+
+      await auth.authorizedFetch('/api/a')
+      expect(server.requests.at(-1)!.headers.get('Authorization')).toBeNull()
+    })
+
+    it('토큰 교환에 실패해 로그아웃된 뒤에 도착한 401에는 다시 토큰 교환을 하지 않는다', async () => {
+      await loggedIn()
+      server.on('POST', '/api/auth/refresh', () => json(401, {}))
+      let answerSlowRequest!: () => void
+      server.on('GET', '/api/slow', () => new Promise((resolve) => (answerSlowRequest = () => resolve(json(401, {})))))
+      protectedResource('GET', '/api/me')
+
+      const slow = auth.authorizedFetch('/api/slow')
+      await auth.authorizedFetch('/api/me')
+      answerSlowRequest()
+
+      expect((await slow).status).toBe(401)
+      expect(rotationCount()).toBe(1)
+    })
+
+    it('토큰 교환이 503이면 로그아웃 상태와 함께 잠시 후 다시 시도 안내를 알린다', async () => {
+      await loggedIn()
+      server.on('POST', '/api/auth/refresh', () => json(503, { message: '잠시 후 다시 시도해 주세요' }))
+      protectedResource('GET', '/api/me')
+
+      expect((await auth.authorizedFetch('/api/me')).status).toBe(401)
+
+      expect(auth.getState()).toEqual({ status: 'logged-out', notice: '잠시 후 다시 시도해 주세요' })
+    })
+
+    it('토큰 교환 중 서버에 닿지 못해도 로그아웃 상태와 함께 잠시 후 다시 시도 안내를 알린다', async () => {
+      const fake = createFakeServer()
+      fake.on('POST', '/api/auth/login', () => json(200, { accessToken: 'expired-access-token' }))
+      fake.on('GET', '/api/me', () => json(401, {}))
+      auth = createAuthClient({
+        fetch: (input, init) =>
+          input === '/api/auth/refresh' ? Promise.reject(new TypeError('Failed to fetch')) : fake.fetch(input, init),
+      })
+      await auth.login('user@example.com', 'correct-password')
+
+      expect((await auth.authorizedFetch('/api/me')).status).toBe(401)
 
       expect(auth.getState()).toEqual({ status: 'logged-out', notice: '잠시 후 다시 시도해 주세요' })
     })
