@@ -9,6 +9,8 @@
 - 구현 이슈는 티켓마다 파일 하나로 `.scratch/<feature-slug>/issues/<NN>-<slug>.md`에 두며, `01`부터 번호를 매긴다. 티켓을 하나의 파일에 몰아 두지 않는다
 - 트리아지 상태는 각 이슈 파일 상단 근처의 `Status:` 줄에 기록한다 (역할 문자열은 `triage-labels.md` 참고)
 - 댓글과 대화 기록은 파일 맨 아래 `## Comments` 제목 밑에 덧붙인다
+- 구현 티켓은 작업을 커밋하면 `Status: resolved`로 바꾼다
+- 한 기능의 티켓이 모두 끝나면, 오래 남길 용어는 `GLOSSARY.md`로, 설계 결정은 `docs/adr/`로 옮긴 뒤 `.scratch/<feature-slug>/`를 지운다. spec은 그때의 생각을 담은 기록일 뿐 구현에 맞춰 고치지 않는다. 지운 spec과 티켓은 git 기록에서 찾는다
 
 ## 스킬이 "이슈 트래커에 게시하라"고 할 때
 

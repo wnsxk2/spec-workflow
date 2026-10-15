@@ -65,7 +65,7 @@ class TokenRotationHttpApiTest {
         String first = api.login(user.email(), user.password()).refreshToken();
         assertThat(api.rotate(first).status()).isEqualTo(200);
 
-        // 유예 시간(10초, 04에서 추가)이 지난 뒤에 확인한다.
+        // 유예 시간(10초)이 지난 뒤에 확인한다.
         clock.advance(Duration.ofSeconds(10).plusSeconds(1));
 
         assertThat(api.rotate(first).status()).isEqualTo(401);
