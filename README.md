@@ -1,6 +1,6 @@
 # spec-workflow
 
-로그인 spec(`.scratch/login/spec.md`)을 구현하는 저장소다. 용어는 `GLOSSARY.md`, 설계 결정은 `docs/adr/`를 따른다.
+로그인 기능을 구현한 저장소다. 용어는 `GLOSSARY.md`, 설계 결정은 `docs/adr/`를 따른다. 구현이 끝난 로그인 spec과 티켓은 저장소에서 지웠고, git 기록(PR #3, 커밋 `5eb6cd3`)에서 볼 수 있다.
 
 | 폴더 | 내용 |
 |---|---|
