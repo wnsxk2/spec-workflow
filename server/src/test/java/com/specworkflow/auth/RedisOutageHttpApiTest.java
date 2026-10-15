@@ -59,6 +59,18 @@ class RedisOutageHttpApiTest {
     }
 
     @Test
+    @DisplayName("Redis가 멈춰 로그인 차단 기록을 다룰 수 없으면, 틀린 비밀번호의 로그인도 503과 잠시 후 다시 시도 안내로 실패한다")
+    void loginWithWrongPasswordFailsWith503() {
+        TestUser user = users.create("correct-password");
+
+        pauseRedis();
+        HttpApi.Response response = api.login(user.email(), "wrong-password");
+
+        assertThat(response.status()).isEqualTo(503);
+        assertThat(response.json().get("message").asString()).isEqualTo("잠시 후 다시 시도해 주세요");
+    }
+
+    @Test
     @DisplayName("Redis가 멈추면 토큰 교환은 503과 잠시 후 다시 시도 안내로 실패한다")
     void tokenRotationFailsWith503() {
         TestUser user = users.create("correct-password");

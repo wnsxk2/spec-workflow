@@ -20,6 +20,7 @@ public class AuthService {
 
     private final UserCredentials credentials;
     private final SessionStore sessions;
+    private final LoginLockout lockout;
     private final AccessTokens accessTokens;
     private final PasswordEncoder passwordEncoder;
     private final Clock clock;
@@ -29,11 +30,13 @@ public class AuthService {
     AuthService(
             UserCredentials credentials,
             SessionStore sessions,
+            LoginLockout lockout,
             AccessTokens accessTokens,
             PasswordEncoder passwordEncoder,
             Clock clock) {
         this.credentials = credentials;
         this.sessions = sessions;
+        this.lockout = lockout;
         this.accessTokens = accessTokens;
         this.passwordEncoder = passwordEncoder;
         this.clock = clock;
@@ -42,23 +45,36 @@ public class AuthService {
 
     /**
      * 이메일과 비밀번호를 확인하고 새 세션을 시작한다.
+     * 로그인 차단 중인 이메일은 비밀번호를 대조하지 않고 거절한다. 로그인 실패는 이메일별로 세고,
+     * 로그인에 성공하면 그 이메일의 실패 기록을 지운다.
      *
      * @throws InvalidCredentialsException 이메일이 없거나 비밀번호가 틀렸을 때
-     * @throws AuthUnavailableException 세션을 기록할 수 없을 때
+     * @throws LoginLockedException 로그인 차단 중이거나 이번 실패로 로그인 차단이 시작되었을 때
+     * @throws AuthUnavailableException 로그인 차단 기록이나 세션을 다룰 수 없을 때
      */
     public IssuedTokens login(String email, String password) {
-        Optional<UserCredentials.StoredCredential> stored = credentials.findByEmail(normalize(email));
+        String normalizedEmail = normalize(email);
+        Instant now = clock.instant();
+        LoginLockout.Attempt attempt = lockout.begin(normalizedEmail, now);
+        if (attempt == LoginLockout.Attempt.LOCKED_OUT) {
+            throw new LoginLockedException();
+        }
+
+        Optional<UserCredentials.StoredCredential> stored = credentials.findByEmail(normalizedEmail);
         String candidate = password == null ? "" : password;
         boolean matches = passwordEncoder.matches(candidate, stored.map(UserCredentials.StoredCredential::passwordHash)
                 .orElse(dummyPasswordHash));
         if (stored.isEmpty() || !matches) {
+            if (attempt == LoginLockout.Attempt.LAST_BEFORE_LOCKOUT) {
+                throw new LoginLockedException();
+            }
             throw new InvalidCredentialsException();
         }
 
         UUID userId = stored.get().userId();
-        Instant now = clock.instant();
         String refreshToken = RefreshTokens.generate();
         sessions.create(userId, RefreshTokens.hash(refreshToken), now);
+        lockout.clear(normalizedEmail);
         return new IssuedTokens(accessTokens.issue(userId, now), refreshToken);
     }
 

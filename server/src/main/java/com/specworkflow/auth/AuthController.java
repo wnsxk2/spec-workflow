@@ -63,6 +63,11 @@ class AuthController {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", e.getMessage()));
     }
 
+    @ExceptionHandler(LoginLockedException.class)
+    ResponseEntity<Map<String, String>> loginLocked(LoginLockedException e) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(Map.of("message", e.getMessage()));
+    }
+
     @ExceptionHandler(AuthUnavailableException.class)
     ResponseEntity<Map<String, String>> unavailable(AuthUnavailableException e) {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of("message", e.getMessage()));

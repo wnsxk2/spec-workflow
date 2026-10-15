@@ -95,7 +95,7 @@ cd web && npm run dev
 | 용도 | PostgreSQL | Redis | 사용자 준비 |
 |---|---|---|---|
 | 개발 (`dev` 프로필) | Compose의 `app` 데이터베이스 | Compose의 0번 데이터베이스 | `server/src/main/resources/db/seed/dev` |
-| E2E (`e2e` 프로필) | Compose의 `app_e2e` 데이터베이스 | Compose의 1번 데이터베이스 | `server/src/main/resources/db/seed/e2e` (`e2e-user@example.com` / `e2e-password-1234`) |
+| E2E (`e2e` 프로필) | Compose의 `app_e2e` 데이터베이스 | Compose의 1번 데이터베이스 | `server/src/main/resources/db/seed/e2e` (`e2e-user@example.com`, 로그인 차단 시나리오 전용 `e2e-lockout@example.com`, 비밀번호는 둘 다 `e2e-password-1234`) |
 | 서버 HTTP API 테스트 | Testcontainers가 띄우는 별도 컨테이너 | Testcontainers가 띄우는 별도 컨테이너 | 테스트마다 무작위 이메일의 사용자를 만든다 |
 
 - 사용자 표의 구조는 `server/src/main/resources/db/migration`에 있고, 서버가 시작할 때 Flyway(데이터베이스 구조를 버전별로 적용하는 도구)가 적용한다.
@@ -128,6 +128,7 @@ PostgreSQL의 개발 데이터는 Docker 볼륨(컨테이너를 다시 만들어
 
 - 서버 테스트는 시계(서버가 지금 시각을 아는 곳)를 테스트용으로 바꿔 끼워, 15분 같은 시간 규칙을 실제로 기다리지 않고 확인한다. Redis 장애는 테스트용 Redis 컨테이너를 일시 정지해 만든다.
 - E2E는 실행할 때 E2E용 서버(포트 18080, `e2e` 프로필)와 화면 개발 서버(포트 15173)를 직접 띄우고, 끝나면 끈다. 개발용 서버(8080)·화면(5173)과 동시에 켜 두어도 된다. E2E에서는 시간을 앞당기지 않는다.
+- E2E는 시작할 때 E2E용 Redis(1번 데이터베이스)를 비운다(`e2e/global-setup.ts`). 앞선 실행이 남긴 로그인 차단 기록 때문에 15분 안에 다시 돌린 E2E가 실패하지 않게 하려는 것이다. 개발용 Redis(0번)는 건드리지 않는다.
 - E2E 결과 보고서는 `e2e/playwright-report/`에 생긴다 (`npx playwright show-report`).
 
 ## 8. 끝내기
