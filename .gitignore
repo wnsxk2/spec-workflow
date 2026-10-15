@@ -1,0 +1,11 @@
+.env
+
+# 서버 (Gradle)
+server/.gradle/
+server/build/
+
+# 화면·E2E (Node.js)
+node_modules/
+web/dist/
+e2e/test-results/
+e2e/playwright-report/

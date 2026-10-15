@@ -1,0 +1,4 @@
+# 개발용: 개발 데이터베이스에 개발용 사용자를 준비한다.
+spring:
+  flyway:
+    locations: classpath:db/migration,classpath:db/seed/dev

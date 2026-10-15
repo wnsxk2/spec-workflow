@@ -1,0 +1,9 @@
+# E2E용: 개발 데이터와 섞이지 않도록 별도 데이터베이스(app_e2e)와 Redis 1번 데이터베이스를 쓴다.
+spring:
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_E2E_DB:app_e2e}
+  data:
+    redis:
+      database: ${REDIS_E2E_DATABASE:1}
+  flyway:
+    locations: classpath:db/migration,classpath:db/seed/e2e
