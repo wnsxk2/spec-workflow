@@ -74,13 +74,13 @@ class TokenRotationHttpApiTest {
     @Test
     @DisplayName("Refresh Token 쿠키가 없으면 401과 함께 Refresh Token 쿠키를 지운다")
     void missingRefreshTokenIsRejected() {
-        assertRejectedAndCookieDeleted(api.rotate(null));
+        api.rotate(null).assertRefreshTokenRejected();
     }
 
     @Test
     @DisplayName("알 수 없는 Refresh Token은 401과 함께 Refresh Token 쿠키를 지운다")
     void unknownRefreshTokenIsRejected() {
-        assertRejectedAndCookieDeleted(api.rotate("unknown-refresh-token"));
+        api.rotate("unknown-refresh-token").assertRefreshTokenRejected();
     }
 
     @Test
@@ -102,7 +102,7 @@ class TokenRotationHttpApiTest {
 
         clock.advance(Duration.ofMinutes(30));
 
-        assertRejectedAndCookieDeleted(api.rotate(refreshToken));
+        api.rotate(refreshToken).assertRefreshTokenRejected();
     }
 
     @Test
@@ -120,7 +120,7 @@ class TokenRotationHttpApiTest {
         assertThat(beforeExpiry.status()).isEqualTo(200);
 
         clock.advance(Duration.ofMinutes(30));
-        assertRejectedAndCookieDeleted(api.rotate(beforeExpiry.refreshToken()));
+        api.rotate(beforeExpiry.refreshToken()).assertRefreshTokenRejected();
     }
 
     @Test
@@ -154,11 +154,4 @@ class TokenRotationHttpApiTest {
         assertThat(api.get("/api/me", accessToken).status()).isEqualTo(401);
     }
 
-    private static void assertRejectedAndCookieDeleted(HttpApi.Response response) {
-        assertThat(response.status()).isEqualTo(401);
-        SetCookie cookie = response.cookie("refresh_token").orElseThrow();
-        assertThat(cookie.value()).isEmpty();
-        assertThat(cookie.attribute("Max-Age")).hasValue("0");
-        assertThat(cookie.attribute("Path")).hasValue("/api/auth");
-    }
 }

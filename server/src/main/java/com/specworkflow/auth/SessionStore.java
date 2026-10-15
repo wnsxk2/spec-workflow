@@ -2,7 +2,6 @@ package com.specworkflow.auth;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.dao.DataAccessException;
@@ -52,24 +51,46 @@ class SessionStore {
     }
 
     /**
-     * 제출된 Refresh Token이 세션의 현재 Refresh Token이면 새 Refresh Token으로 교환하고 세션 만료를 다시 센다.
-     *
-     * @return 교환했으면 세션의 사용자 식별자, 교환할 수 없으면 빈 값
+     * 토큰 교환 규칙에 따라 제출된 Refresh Token을 처리한다.
+     * 현재 Refresh Token이면 새 Refresh Token으로 교환하고 세션 만료를 다시 센다.
+     * 유예 시간 안의 직전 Refresh Token이면 방금 발급한 Refresh Token을 다시 준다.
+     * 그 밖에 이 세션에서 발급했던 Refresh Token이면 재사용 감지로 세션을 폐기한다.
      */
-    Optional<UUID> rotate(String submittedHash, String newHash, Instant now) {
+    Rotation rotate(String submittedRefreshToken, String newRefreshToken, Instant now) {
+        String submittedHash = RefreshTokens.hash(submittedRefreshToken);
         List<?> result = execute(
                 ROTATE_REFRESH_TOKEN,
                 List.of(REFRESH_TOKEN_KEY_PREFIX + submittedHash),
                 submittedHash,
-                newHash,
+                RefreshTokens.hash(newRefreshToken),
+                newRefreshToken,
                 String.valueOf(now.toEpochMilli()),
                 String.valueOf(AuthPolicy.SESSION_IDLE_LIFETIME.toMillis()),
+                String.valueOf(AuthPolicy.GRACE_PERIOD.toMillis()),
                 SESSION_KEY_PREFIX,
                 REFRESH_TOKEN_KEY_PREFIX);
-        if ("ROTATED".equals(result.get(0))) {
-            return Optional.of(UUID.fromString((String) result.get(1)));
-        }
-        return Optional.empty();
+        return switch ((String) result.get(0)) {
+            case "ROTATED" -> new Rotation.Issued(UUID.fromString((String) result.get(1)), newRefreshToken);
+            case "GRACE" -> new Rotation.Issued(UUID.fromString((String) result.get(1)), (String) result.get(2));
+            case "REUSE_DETECTED" -> new Rotation.ReuseDetected(UUID.fromString((String) result.get(1)));
+            default -> new Rotation.Rejected();
+        };
+    }
+
+    /** 토큰 교환의 결과. */
+    sealed interface Rotation {
+
+        /**
+         * 돌려줄 Refresh Token이 있다. 현재 Refresh Token을 교환했으면 새 Refresh Token이고,
+         * 유예 시간 안의 직전 Refresh Token이면 방금 발급한 Refresh Token이다.
+         */
+        record Issued(UUID userId, String refreshToken) implements Rotation {}
+
+        /** 재사용 감지. 도난 신호로 보고 그 세션을 폐기했다. */
+        record ReuseDetected(UUID userId) implements Rotation {}
+
+        /** 알 수 없는 Refresh Token이거나 세션 만료 등으로 교환할 수 없다. */
+        record Rejected() implements Rotation {}
     }
 
     @SuppressWarnings("rawtypes")

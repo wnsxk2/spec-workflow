@@ -5,6 +5,8 @@ import java.time.Instant;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -14,6 +16,8 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class AuthService {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
     private final UserCredentials credentials;
     private final SessionStore sessions;
@@ -61,6 +65,8 @@ public class AuthService {
 
     /**
      * 토큰 교환. 현재 Refresh Token을 내면 새 Access Token과 새 Refresh Token을 발급하고 세션 만료를 다시 센다.
+     * 유예 시간 안의 직전 Refresh Token에는 방금 발급한 Refresh Token을 다시 주고, 그 밖에 이미 쓴 Refresh Token이면
+     * 재사용 감지로 그 세션을 폐기한다.
      *
      * @throws RefreshTokenRejectedException Refresh Token이 없거나 교환할 수 없을 때
      * @throws AuthUnavailableException 세션 저장소를 쓸 수 없을 때
@@ -70,10 +76,16 @@ public class AuthService {
             throw new RefreshTokenRejectedException();
         }
         Instant now = clock.instant();
-        String newRefreshToken = RefreshTokens.generate();
-        UUID userId = sessions.rotate(RefreshTokens.hash(refreshToken), RefreshTokens.hash(newRefreshToken), now)
-                .orElseThrow(RefreshTokenRejectedException::new);
-        return new IssuedTokens(accessTokens.issue(userId, now), newRefreshToken);
+        return switch (sessions.rotate(refreshToken, RefreshTokens.generate(), now)) {
+            case SessionStore.Rotation.Issued issued ->
+                    new IssuedTokens(accessTokens.issue(issued.userId(), now), issued.refreshToken());
+            case SessionStore.Rotation.ReuseDetected reuse -> {
+                log.warn("재사용 감지: 이미 토큰 교환에 쓴 Refresh Token이 다시 제출되어 세션을 폐기했습니다. userId={}",
+                        reuse.userId());
+                throw new RefreshTokenRejectedException();
+            }
+            case SessionStore.Rotation.Rejected rejected -> throw new RefreshTokenRejectedException();
+        };
     }
 
     /** 이메일은 앞뒤 공백을 지우고 소문자로 바꾼 뒤 비교한다. */

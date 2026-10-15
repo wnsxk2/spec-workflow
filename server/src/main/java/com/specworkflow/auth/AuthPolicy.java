@@ -11,5 +11,8 @@ final class AuthPolicy {
     /** 마지막 토큰 교환(또는 로그인)으로부터 세션 만료까지의 시간. */
     static final Duration SESSION_IDLE_LIFETIME = Duration.ofMinutes(30);
 
+    /** 토큰 교환 직후, 방금 쓴 Refresh Token이 다시 제출되어도 재사용 감지로 보지 않는 시간. */
+    static final Duration GRACE_PERIOD = Duration.ofSeconds(10);
+
     private AuthPolicy() {}
 }

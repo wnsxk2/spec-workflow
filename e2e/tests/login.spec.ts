@@ -47,6 +47,27 @@ test('시나리오 2: 로그인 후 새로고침해도 토큰 교환으로 로�
   expect(await refreshTokenCookie(context)).not.toBe(refreshTokenBefore)
 })
 
+test('시나리오 3: 로그인 후 같은 화면을 탭 5개로 동시에 열어도 모든 탭이 로그인 상태이고, 이후 아무 탭이나 새로고침해도 유지된다', async ({
+  page,
+  context,
+}) => {
+  await login(page, USER.email, USER.password)
+  await expect(page.getByTestId('user-id')).toHaveText(/^[0-9a-f-]{36}$/)
+  const loggedInUserId = (await page.getByTestId('user-id').textContent())!
+
+  // 탭 5개가 같은 Refresh Token으로 거의 동시에 토큰 교환한다. 유예 시간이 같은 새 Refresh Token을 돌려준다.
+  const tabs = await Promise.all(Array.from({ length: 5 }, () => context.newPage()))
+  await Promise.all(tabs.map((tab) => tab.goto('/')))
+  for (const tab of tabs) {
+    await expect(tab.getByTestId('user-id')).toHaveText(loggedInUserId)
+  }
+
+  await tabs[2].reload()
+  await expect(tabs[2].getByTestId('user-id')).toHaveText(loggedInUserId)
+  await page.reload()
+  await expect(page.getByTestId('user-id')).toHaveText(loggedInUserId)
+})
+
 test('시나리오 5: 틀린 비밀번호와 존재하지 않는 이메일은 같은 안내를 보여 준다', async ({ page }) => {
   await login(page, USER.email, 'wrong-password')
   await expect(page.getByRole('alert')).toHaveText(LOGIN_FAILURE_MESSAGE)

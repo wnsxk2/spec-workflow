@@ -1,5 +1,7 @@
 package com.specworkflow.support;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -83,6 +85,15 @@ public class HttpApi {
         /** 응답이 설정한 Refresh Token 쿠키의 값. */
         public String refreshToken() {
             return cookie("refresh_token").orElseThrow().value();
+        }
+
+        /** 토큰 교환이 401로 거절되고 Refresh Token 쿠키를 지우라는 응답인지 확인한다. */
+        public void assertRefreshTokenRejected() {
+            assertThat(status()).isEqualTo(401);
+            SetCookie cookie = cookie("refresh_token").orElseThrow();
+            assertThat(cookie.value()).isEmpty();
+            assertThat(cookie.attribute("Max-Age")).hasValue("0");
+            assertThat(cookie.attribute("Path")).hasValue("/api/auth");
         }
 
         public Optional<SetCookie> cookie(String name) {
