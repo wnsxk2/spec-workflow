@@ -35,6 +35,16 @@ public class HttpApi {
                 .POST(HttpRequest.BodyPublishers.ofString(jsonBody)));
     }
 
+    /** 토큰 교환. refreshToken이 null이면 Refresh Token 쿠키 없이 요청한다. */
+    public Response rotate(String refreshToken) {
+        HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(baseUrl + "/api/auth/refresh"))
+                .POST(HttpRequest.BodyPublishers.noBody());
+        if (refreshToken != null) {
+            request.header("Cookie", "refresh_token=" + refreshToken);
+        }
+        return send(request);
+    }
+
     public Response get(String path, String accessToken) {
         HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(baseUrl + path)).GET();
         if (accessToken != null) {
@@ -68,6 +78,11 @@ public class HttpApi {
 
         public String accessToken() {
             return json().get("accessToken").asString();
+        }
+
+        /** 응답이 설정한 Refresh Token 쿠키의 값. */
+        public String refreshToken() {
+            return cookie("refresh_token").orElseThrow().value();
         }
 
         public Optional<SetCookie> cookie(String name) {

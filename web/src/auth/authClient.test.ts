@@ -87,4 +87,57 @@ describe('화면 인증 모듈', () => {
 
     expect(server.requests[1].headers.get('Authorization')).toBeNull()
   })
+  describe('로그인 상태 복원', () => {
+    it('앱 시작 시 토큰 교환으로 로그인 상태를 복원하고, 받은 Access Token으로 인증 요청을 보낸다', async () => {
+      server.on('POST', '/api/auth/refresh', () => json(200, { accessToken: 'restored-access-token' }))
+      server.on('GET', '/api/me', () => json(200, { userId: 'user-1' }))
+      const notified: string[] = []
+      auth.subscribe(() => notified.push(auth.getState().status))
+
+      const result = await auth.restore()
+      await auth.authorizedFetch('/api/me')
+
+      expect(result).toEqual({ ok: true })
+      expect(auth.getState()).toEqual({ status: 'logged-in' })
+      expect(notified).toEqual(['restoring', 'logged-in'])
+      expect(server.requests[1].headers.get('Authorization')).toBe('Bearer restored-access-token')
+    })
+
+    it('여러 번 불러도 토큰 교환은 한 번만 시도한다', async () => {
+      server.on('POST', '/api/auth/refresh', () => json(200, { accessToken: 'restored-access-token' }))
+
+      await Promise.all([auth.restore(), auth.restore()])
+      await auth.restore()
+
+      expect(server.requests.filter((request) => request.path === '/api/auth/refresh')).toHaveLength(1)
+    })
+
+    it('토큰 교환이 401이면 Access Token 없이 로그아웃 상태를 알린다', async () => {
+      server.on('POST', '/api/auth/refresh', () => json(401, { message: '다시 로그인해 주세요' }))
+      server.on('GET', '/api/me', () => json(401, {}))
+
+      const result = await auth.restore()
+      await auth.authorizedFetch('/api/me')
+
+      expect(result).toEqual({ ok: false })
+      expect(auth.getState()).toEqual({ status: 'logged-out' })
+      expect(server.requests[1].headers.get('Authorization')).toBeNull()
+    })
+
+    it('토큰 교환이 503이면 로그아웃 상태와 함께 잠시 후 다시 시도 안내를 알린다', async () => {
+      server.on('POST', '/api/auth/refresh', () => json(503, { message: '잠시 후 다시 시도해 주세요' }))
+
+      await auth.restore()
+
+      expect(auth.getState()).toEqual({ status: 'logged-out', notice: '잠시 후 다시 시도해 주세요' })
+    })
+
+    it('서버에 닿지 못해도 로그아웃 상태와 함께 잠시 후 다시 시도 안내를 알린다', async () => {
+      auth = createAuthClient({ fetch: () => Promise.reject(new TypeError('Failed to fetch')) })
+
+      await auth.restore()
+
+      expect(auth.getState()).toEqual({ status: 'logged-out', notice: '잠시 후 다시 시도해 주세요' })
+    })
+  })
 })

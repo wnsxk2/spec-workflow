@@ -11,4 +11,4 @@ redis.call('PEXPIRE', KEYS[1], ARGV[6])
 redis.call('SADD', KEYS[2], ARGV[2])
 redis.call('PEXPIRE', KEYS[2], ARGV[6])
 redis.call('SET', KEYS[3], ARGV[5], 'PX', ARGV[6])
-return 1
+return {"CREATED"}

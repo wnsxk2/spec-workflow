@@ -59,6 +59,20 @@ class RedisOutageHttpApiTest {
     }
 
     @Test
+    @DisplayName("Redis가 멈추면 토큰 교환은 503과 잠시 후 다시 시도 안내로 실패한다")
+    void tokenRotationFailsWith503() {
+        TestUser user = users.create("correct-password");
+        String refreshToken = api.login(user.email(), user.password()).refreshToken();
+
+        pauseRedis();
+        HttpApi.Response response = api.rotate(refreshToken);
+
+        assertThat(response.status()).isEqualTo(503);
+        assertThat(response.json().get("message").asString()).isEqualTo("잠시 후 다시 시도해 주세요");
+        assertThat(response.cookie("refresh_token")).isEmpty();
+    }
+
+    @Test
     @DisplayName("Redis가 멈춰도 유효한 Access Token의 보호된 요청은 성공한다")
     void protectedRequestDoesNotNeedRedis() {
         TestUser user = users.create("correct-password");

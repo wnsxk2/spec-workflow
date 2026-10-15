@@ -1,10 +1,12 @@
 package com.specworkflow.auth;
 
+import java.time.Duration;
 import java.util.Map;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -25,10 +27,26 @@ class AuthController {
 
     @PostMapping("/api/auth/login")
     ResponseEntity<AccessTokenResponse> login(@RequestBody LoginRequest request) {
-        LoginResult result = auth.login(request.email(), request.password());
+        IssuedTokens result = auth.login(request.email(), request.password());
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, refreshTokenCookie(result.refreshToken()).toString())
                 .body(new AccessTokenResponse(result.accessToken()));
+    }
+
+    @PostMapping("/api/auth/refresh")
+    ResponseEntity<AccessTokenResponse> refresh(
+            @CookieValue(name = REFRESH_TOKEN_COOKIE, required = false) String refreshToken) {
+        IssuedTokens result = auth.rotate(refreshToken);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, refreshTokenCookie(result.refreshToken()).toString())
+                .body(new AccessTokenResponse(result.accessToken()));
+    }
+
+    @ExceptionHandler(RefreshTokenRejectedException.class)
+    ResponseEntity<Map<String, String>> refreshTokenRejected(RefreshTokenRejectedException e) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .header(HttpHeaders.SET_COOKIE, expiredRefreshTokenCookie().toString())
+                .body(Map.of("message", e.getMessage()));
     }
 
     @ExceptionHandler(InvalidCredentialsException.class)
@@ -42,12 +60,21 @@ class AuthController {
     }
 
     private static ResponseCookie refreshTokenCookie(String refreshToken) {
-        return ResponseCookie.from(REFRESH_TOKEN_COOKIE, refreshToken)
+        return refreshTokenCookie(refreshToken, AuthPolicy.SESSION_IDLE_LIFETIME);
+    }
+
+    /** 브라우저가 Refresh Token 쿠키를 지우게 하는 쿠키. 속성은 설정할 때와 같다. */
+    private static ResponseCookie expiredRefreshTokenCookie() {
+        return refreshTokenCookie("", Duration.ZERO);
+    }
+
+    private static ResponseCookie refreshTokenCookie(String value, Duration maxAge) {
+        return ResponseCookie.from(REFRESH_TOKEN_COOKIE, value)
                 .httpOnly(true)
                 .secure(true)
                 .sameSite("Strict")
                 .path(REFRESH_TOKEN_COOKIE_PATH)
-                .maxAge(AuthPolicy.SESSION_IDLE_LIFETIME)
+                .maxAge(maxAge)
                 .build();
     }
 

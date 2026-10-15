@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service;
 
 /**
  * 인증 모듈. 세션 저장소와 Access Token 발급을 안에 숨긴다.
- * 토큰 교환(02)과 로그아웃(05)은 이후 티켓에서 더한다.
+ * 로그아웃(05)은 이후 티켓에서 더한다.
  */
 @Service
 public class AuthService {
@@ -43,7 +43,7 @@ public class AuthService {
      * @throws InvalidCredentialsException 이메일이 없거나 비밀번호가 틀렸을 때
      * @throws AuthUnavailableException 세션을 기록할 수 없을 때
      */
-    public LoginResult login(String email, String password) {
+    public IssuedTokens login(String email, String password) {
         Optional<UserCredentials.StoredCredential> stored = credentials.findByEmail(normalize(email));
         String candidate = password == null ? "" : password;
         boolean matches = passwordEncoder.matches(candidate, stored.map(UserCredentials.StoredCredential::passwordHash)
@@ -56,7 +56,24 @@ public class AuthService {
         Instant now = clock.instant();
         String refreshToken = RefreshTokens.generate();
         sessions.create(userId, RefreshTokens.hash(refreshToken), now);
-        return new LoginResult(accessTokens.issue(userId, now), refreshToken);
+        return new IssuedTokens(accessTokens.issue(userId, now), refreshToken);
+    }
+
+    /**
+     * 토큰 교환. 현재 Refresh Token을 내면 새 Access Token과 새 Refresh Token을 발급하고 세션 만료를 다시 센다.
+     *
+     * @throws RefreshTokenRejectedException Refresh Token이 없거나 교환할 수 없을 때
+     * @throws AuthUnavailableException 세션 저장소를 쓸 수 없을 때
+     */
+    public IssuedTokens rotate(String refreshToken) {
+        if (refreshToken == null || refreshToken.isBlank()) {
+            throw new RefreshTokenRejectedException();
+        }
+        Instant now = clock.instant();
+        String newRefreshToken = RefreshTokens.generate();
+        UUID userId = sessions.rotate(RefreshTokens.hash(refreshToken), RefreshTokens.hash(newRefreshToken), now)
+                .orElseThrow(RefreshTokenRejectedException::new);
+        return new IssuedTokens(accessTokens.issue(userId, now), newRefreshToken);
     }
 
     /** 이메일은 앞뒤 공백을 지우고 소문자로 바꾼 뒤 비교한다. */

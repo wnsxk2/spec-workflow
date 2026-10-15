@@ -108,5 +108,8 @@ class LoginHttpApiTest {
                 .isNotEqualTo(phone.cookie("refresh_token").orElseThrow().value());
         assertThat(api.get("/api/me", phone.accessToken()).status()).isEqualTo(200);
         assertThat(api.get("/api/me", laptop.accessToken()).status()).isEqualTo(200);
+        // 나중 로그인이 앞선 세션을 덮어쓰지 않았으므로 두 세션 모두 토큰 교환할 수 있다.
+        assertThat(api.rotate(phone.refreshToken()).status()).isEqualTo(200);
+        assertThat(api.rotate(laptop.refreshToken()).status()).isEqualTo(200);
     }
 }

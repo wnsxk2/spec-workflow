@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from 'react'
 import { useAuth } from './auth/AuthContext'
 
-export function LoginPage() {
+/** notice: 로그인 상태 복원이 실패한 까닭처럼, 로그인 화면에 함께 보여 줄 안내. */
+export function LoginPage({ notice }: { notice?: string }) {
   const { auth } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(notice ?? null)
   const [submitting, setSubmitting] = useState(false)
 
   async function submit(event: FormEvent) {
