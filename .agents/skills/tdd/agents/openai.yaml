@@ -1,3 +1,0 @@
-interface:
-  display_name: "테스트 주도 개발"
-  short_description: "합의한 공개 인터페이스에서 테스트를 먼저 작성하고 기능을 구현합니다"

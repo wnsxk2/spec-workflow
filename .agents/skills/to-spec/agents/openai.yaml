@@ -1,6 +1,0 @@
-interface:
-  display_name: "대화를 스펙으로 정리"
-  short_description: "이미 논의한 내용을 종합해 프로젝트 이슈 트래커에 스펙을 작성합니다"
-
-policy:
-  allow_implicit_invocation: false

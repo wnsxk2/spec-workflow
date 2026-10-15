@@ -1,3 +1,0 @@
-interface:
-  display_name: "코드 리뷰"
-  short_description: "기준점 이후 변경을 저장소 표준과 스펙 두 축으로 리뷰합니다"
