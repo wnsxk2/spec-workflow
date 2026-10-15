@@ -42,6 +42,15 @@ class AuthController {
                 .body(new AccessTokenResponse(result.accessToken()));
     }
 
+    /** 로그아웃은 언제나 성공하고 Refresh Token 쿠키를 지운다. */
+    @PostMapping("/api/auth/logout")
+    ResponseEntity<Void> logout(@CookieValue(name = REFRESH_TOKEN_COOKIE, required = false) String refreshToken) {
+        auth.logout(refreshToken);
+        return ResponseEntity.noContent()
+                .header(HttpHeaders.SET_COOKIE, expiredRefreshTokenCookie().toString())
+                .build();
+    }
+
     @ExceptionHandler(RefreshTokenRejectedException.class)
     ResponseEntity<Map<String, String>> refreshTokenRejected(RefreshTokenRejectedException e) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)

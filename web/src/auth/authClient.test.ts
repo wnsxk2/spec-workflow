@@ -321,4 +321,86 @@ describe('화면 인증 모듈', () => {
       expect(auth.getState()).toEqual({ status: 'logged-out', notice: '잠시 후 다시 시도해 주세요' })
     })
   })
+
+  describe('로그아웃하기', () => {
+    async function loggedIn() {
+      server.on('POST', '/api/auth/login', () => json(200, { accessToken: 'access-token-1' }))
+      await auth.login('user@example.com', 'correct-password')
+    }
+
+    it('서버에 로그아웃을 요청하고, 응답을 기다리기 전에 메모리의 Access Token을 지우며, 로그아웃 상태를 알린다', async () => {
+      await loggedIn()
+      let finishLogout!: () => void
+      server.on('POST', '/api/auth/logout', () => new Promise((resolve) => (finishLogout = () => resolve(new Response(null, { status: 204 })))))
+      server.on('GET', '/api/me', () => json(401, {}))
+      const notified: string[] = []
+      auth.subscribe(() => notified.push(auth.getState().status))
+
+      const logout = auth.logout()
+      await vi.waitFor(() => expect(server.requests.at(-1)!.path).toBe('/api/auth/logout'))
+      await auth.authorizedFetch('/api/me')
+      expect(server.requests.at(-1)!.headers.get('Authorization')).toBeNull()
+      finishLogout()
+
+      expect(await logout).toEqual({ ok: true })
+      expect(auth.getState()).toEqual({ status: 'logged-out' })
+      expect(notified).toEqual(['logged-out'])
+    })
+
+    it('서버가 실패 응답을 주어도 Access Token을 지우고 로그아웃 상태를 알리되, 쿠키 삭제까지 성공했다고 보지 않는다', async () => {
+      await loggedIn()
+      server.on('POST', '/api/auth/logout', () => json(500, {}))
+      server.on('GET', '/api/me', () => json(401, {}))
+      const notified: string[] = []
+      auth.subscribe(() => notified.push(auth.getState().status))
+
+      const result = await auth.logout()
+      await auth.authorizedFetch('/api/me')
+
+      expect(result).toEqual({ ok: false })
+      expect(auth.getState()).toEqual({ status: 'logged-out', notice: expect.any(String) })
+      expect(notified).toContain('logged-out')
+      expect(server.requests.at(-1)!.headers.get('Authorization')).toBeNull()
+    })
+
+    it('서버에 닿지 못해도 Access Token을 지우고 로그아웃 상태를 알리되, 쿠키 삭제까지 성공했다고 보지 않는다', async () => {
+      const fake = createFakeServer()
+      fake.on('POST', '/api/auth/login', () => json(200, { accessToken: 'access-token-1' }))
+      fake.on('GET', '/api/me', () => json(401, {}))
+      auth = createAuthClient({
+        fetch: (input, init) =>
+          input === '/api/auth/logout' ? Promise.reject(new TypeError('Failed to fetch')) : fake.fetch(input, init),
+      })
+      await auth.login('user@example.com', 'correct-password')
+
+      const notified: string[] = []
+      auth.subscribe(() => notified.push(auth.getState().status))
+
+      const result = await auth.logout()
+      await auth.authorizedFetch('/api/me')
+
+      expect(result).toEqual({ ok: false })
+      expect(auth.getState()).toEqual({ status: 'logged-out', notice: expect.any(String) })
+      expect(notified).toContain('logged-out')
+      expect(fake.requests.at(-1)!.headers.get('Authorization')).toBeNull()
+    })
+
+    it('로그아웃하는 동안 진행 중이던 토큰 교환이 늦게 끝나도 로그인 상태로 되돌아가지 않는다', async () => {
+      await loggedIn()
+      let finishRotation!: () => void
+      server.on('POST', '/api/auth/refresh', () => new Promise((resolve) => (finishRotation = () => resolve(json(200, { accessToken: 'access-token-2' })))))
+      server.on('GET', '/api/me', () => json(401, {}))
+      server.on('POST', '/api/auth/logout', () => new Response(null, { status: 204 }))
+
+      const pending = auth.authorizedFetch('/api/me')
+      await vi.waitFor(() => expect(server.requests.at(-1)!.path).toBe('/api/auth/refresh'))
+      await auth.logout()
+      finishRotation()
+      await pending
+
+      expect(auth.getState()).toEqual({ status: 'logged-out' })
+      await auth.authorizedFetch('/api/me')
+      expect(server.requests.at(-1)!.headers.get('Authorization')).toBeNull()
+    })
+  })
 })

@@ -28,6 +28,10 @@ class SessionStore {
     private static final RedisScript<List> ROTATE_REFRESH_TOKEN =
             RedisScript.of(new ClassPathResource("auth/rotate-refresh-token.lua"), List.class);
 
+    @SuppressWarnings("rawtypes")
+    private static final RedisScript<List> REVOKE_SESSION =
+            RedisScript.of(new ClassPathResource("auth/revoke-session.lua"), List.class);
+
     private final StringRedisTemplate redis;
 
     SessionStore(StringRedisTemplate redis) {
@@ -91,6 +95,15 @@ class SessionStore {
 
         /** 알 수 없는 Refresh Token이거나 세션 만료 등으로 교환할 수 없다. */
         record Rejected() implements Rotation {}
+    }
+
+    /** 로그아웃: 제출된 Refresh Token이 속한 세션만 폐기한다. 그런 세션이 없으면 아무 일도 하지 않는다. */
+    void revoke(String refreshToken) {
+        execute(
+                REVOKE_SESSION,
+                List.of(REFRESH_TOKEN_KEY_PREFIX + RefreshTokens.hash(refreshToken)),
+                SESSION_KEY_PREFIX,
+                REFRESH_TOKEN_KEY_PREFIX);
     }
 
     @SuppressWarnings("rawtypes")

@@ -39,7 +39,16 @@ public class HttpApi {
 
     /** 토큰 교환. refreshToken이 null이면 Refresh Token 쿠키 없이 요청한다. */
     public Response rotate(String refreshToken) {
-        HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(baseUrl + "/api/auth/refresh"))
+        return postWithRefreshToken("/api/auth/refresh", refreshToken);
+    }
+
+    /** 로그아웃. refreshToken이 null이면 Refresh Token 쿠키 없이 요청한다. */
+    public Response logout(String refreshToken) {
+        return postWithRefreshToken("/api/auth/logout", refreshToken);
+    }
+
+    private Response postWithRefreshToken(String path, String refreshToken) {
+        HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(baseUrl + path))
                 .POST(HttpRequest.BodyPublishers.noBody());
         if (refreshToken != null) {
             request.header("Cookie", "refresh_token=" + refreshToken);
@@ -90,6 +99,17 @@ public class HttpApi {
         /** 토큰 교환이 401로 거절되고 Refresh Token 쿠키를 지우라는 응답인지 확인한다. */
         public void assertRefreshTokenRejected() {
             assertThat(status()).isEqualTo(401);
+            assertRefreshTokenCookieDeleted();
+        }
+
+        /** 로그아웃이 204로 성공하고 Refresh Token 쿠키를 지우라는 응답인지 확인한다. */
+        public void assertLogoutSucceeded() {
+            assertThat(status()).isEqualTo(204);
+            assertRefreshTokenCookieDeleted();
+        }
+
+        /** 발급할 때와 같은 이름·경로의 Refresh Token 쿠키를 지우라는 응답인지 확인한다. */
+        public void assertRefreshTokenCookieDeleted() {
             SetCookie cookie = cookie("refresh_token").orElseThrow();
             assertThat(cookie.value()).isEmpty();
             assertThat(cookie.attribute("Max-Age")).hasValue("0");

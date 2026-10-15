@@ -33,6 +33,9 @@ export function ProtectedPage() {
         </p>
       )}
       {error && <p role="alert">{error}</p>}
+      <button type="button" onClick={() => void auth.logout()}>
+        로그아웃
+      </button>
     </main>
   )
 }

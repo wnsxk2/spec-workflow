@@ -11,8 +11,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 /**
- * 인증 모듈. 세션 저장소와 Access Token 발급을 안에 숨긴다.
- * 로그아웃(05)은 이후 티켓에서 더한다.
+ * 인증 모듈. 로그인, 토큰 교환, 로그아웃 세 가지 동작을 가진다. 세션 저장소와 Access Token 발급을 안에 숨긴다.
  */
 @Service
 public class AuthService {
@@ -86,6 +85,22 @@ public class AuthService {
             }
             case SessionStore.Rotation.Rejected rejected -> throw new RefreshTokenRejectedException();
         };
+    }
+
+    /**
+     * 로그아웃. 이 Refresh Token이 속한 세션만 폐기한다. 언제나 성공한다.
+     * 세션이 없거나 이미 만료·폐기되었으면 할 일이 없고, Redis를 쓸 수 없으면 남은 세션은 세션 만료로 사라진다.
+     * 이미 발급된 Access Token은 자신의 만료 시각까지 유효하다 (ADR-0001).
+     */
+    public void logout(String refreshToken) {
+        if (refreshToken == null || refreshToken.isBlank()) {
+            return;
+        }
+        try {
+            sessions.revoke(refreshToken);
+        } catch (AuthUnavailableException e) {
+            log.warn("로그아웃: Redis를 쓸 수 없어 세션을 폐기하지 못했습니다. 남은 세션은 세션 만료로 사라집니다.", e);
+        }
     }
 
     /** 이메일은 앞뒤 공백을 지우고 소문자로 바꾼 뒤 비교한다. */

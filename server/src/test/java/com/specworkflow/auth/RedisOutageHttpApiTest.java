@@ -73,6 +73,17 @@ class RedisOutageHttpApiTest {
     }
 
     @Test
+    @DisplayName("Redis가 멈춰 세션을 폐기할 수 없어도 로그아웃은 성공하고 Refresh Token 쿠키를 지운다")
+    void logoutSucceedsWithoutRedis() {
+        TestUser user = users.create("correct-password");
+        String refreshToken = api.login(user.email(), user.password()).refreshToken();
+
+        pauseRedis();
+
+        api.logout(refreshToken).assertLogoutSucceeded();
+    }
+
+    @Test
     @DisplayName("Redis가 멈춰도 유효한 Access Token의 보호된 요청은 성공한다")
     void protectedRequestDoesNotNeedRedis() {
         TestUser user = users.create("correct-password");

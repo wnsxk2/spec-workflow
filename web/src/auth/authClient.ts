@@ -1,7 +1,6 @@
 /**
  * 화면 인증 모듈. 화면의 나머지 부분은 이 모듈만 통해 로그인을 다룬다.
  * Access Token은 이 모듈의 메모리에만 둔다. localStorage나 쿠키에 두지 않는다.
- * 로그아웃(05)은 이후 티켓에서 더한다.
  */
 export type AuthState =
   /** 앱 시작 시 토큰 교환으로 로그인 상태를 되살리는 중이다. */
@@ -16,6 +15,11 @@ export type LoginFailure = 'invalid-credentials' | 'login-lockout' | 'temporaril
 export type LoginResult = { ok: true } | { ok: false; failure: LoginFailure; message: string }
 
 export type RestoreResult = { ok: boolean }
+
+/** ok가 false면 서버가 로그아웃(세션 폐기와 Refresh Token 쿠키 삭제)을 확인해 주지 않았다. */
+export type LogoutResult = { ok: boolean }
+
+const LOGOUT_NOT_CONFIRMED = '서버에 로그아웃을 알리지 못했습니다. 새로고침하면 다시 로그인될 수 있습니다'
 
 const DEFAULT_MESSAGES: Record<LoginFailure, string> = {
   'invalid-credentials': '이메일 또는 비밀번호가 올바르지 않습니다',
@@ -36,6 +40,11 @@ export interface AuthClient {
    * 401을 받으면 토큰 교환을 한 번 하고 같은 요청을 한 번 다시 보낸다. 교환에 실패하면 로그아웃 상태가 된다.
    */
   authorizedFetch(path: string, init?: RequestInit): Promise<Response>
+  /**
+   * 로그아웃하기. 메모리의 Access Token을 바로 지우고 로그아웃 상태를 알린 뒤, 서버에 이 브라우저의 로그아웃을 요청한다.
+   * 서버 응답을 받지 못하면 Refresh Token 쿠키가 남았을 수 있으므로 성공으로 보지 않고 안내를 싣는다.
+   */
+  logout(): Promise<LogoutResult>
   getState(): AuthState
   /** 로그인 상태가 바뀔 때마다 알림을 받는다. 반환한 함수를 부르면 그만 받는다. */
   subscribe(listener: () => void): () => void
@@ -50,6 +59,8 @@ export function createAuthClient({ fetch = globalThis.fetch.bind(globalThis) }: 
   let restoreInFlight: Promise<RestoreResult> | null = null
   /** 진행 중인 토큰 교환. 한 탭 안에서 동시에 교환이 필요하면 이 하나를 함께 기다린다. */
   let rotationInFlight: Promise<boolean> | null = null
+  /** 로그아웃한 횟수. 로그아웃 전에 시작한 토큰 교환이 늦게 끝나도 로그인 상태로 되돌리지 않기 위해 쓴다. */
+  let logoutCount = 0
 
   function setState(next: AuthState) {
     state = next
@@ -74,16 +85,20 @@ export function createAuthClient({ fetch = globalThis.fetch.bind(globalThis) }: 
   }
 
   async function rotateOnce(): Promise<boolean> {
+    const logoutCountAtStart = logoutCount
+    const loggedOutMeanwhile = () => logoutCount !== logoutCountAtStart
     let response: Response
     try {
       response = await fetch('/api/auth/refresh', { method: 'POST' })
     } catch {
-      return becomeLoggedOut(DEFAULT_MESSAGES['temporarily-unavailable'])
+      return loggedOutMeanwhile() ? false : becomeLoggedOut(DEFAULT_MESSAGES['temporarily-unavailable'])
     }
 
+    if (loggedOutMeanwhile()) return false
     if (response.status === 401) return becomeLoggedOut()
     if (!response.ok) return becomeLoggedOut((await messageOf(response)) ?? DEFAULT_MESSAGES['temporarily-unavailable'])
     const body = (await response.json()) as { accessToken: string }
+    if (loggedOutMeanwhile()) return false
     accessToken = body.accessToken
     // 이미 로그인 상태(401 뒤 자동 복구)면 로그인 상태가 바뀌지 않았으므로 알리지 않는다.
     if (state.status !== 'logged-in') setState({ status: 'logged-in' })
@@ -141,6 +156,19 @@ export function createAuthClient({ fetch = globalThis.fetch.bind(globalThis) }: 
       const alreadyRotated = accessToken !== sentWith
       if (!alreadyRotated && !(await rotate())) return response
       return (await send(path, init)).response
+    },
+
+    async logout() {
+      logoutCount += 1
+      becomeLoggedOut()
+      let confirmed: boolean
+      try {
+        confirmed = (await fetch('/api/auth/logout', { method: 'POST' })).ok
+      } catch {
+        confirmed = false
+      }
+      if (!confirmed) setState({ status: 'logged-out', notice: LOGOUT_NOT_CONFIRMED })
+      return { ok: confirmed }
     },
 
     getState: () => state,

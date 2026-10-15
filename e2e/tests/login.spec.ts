@@ -8,6 +8,12 @@ async function refreshTokenCookie(context: BrowserContext) {
   return (await context.cookies()).find((cookie) => cookie.name === 'refresh_token')?.value
 }
 
+async function expectLoggedOut(page: Page) {
+  await expect(page.getByRole('heading', { name: '로그인' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '내 정보' })).toHaveCount(0)
+  await expect(page.getByTestId('user-id')).toHaveCount(0)
+}
+
 async function login(page: Page, email: string, password: string) {
   await page.goto('/')
   await page.getByLabel('이메일').fill(email)
@@ -66,6 +72,30 @@ test('시나리오 3: 로그인 후 같은 화면을 탭 5개로 동시에 열�
   await expect(tabs[2].getByTestId('user-id')).toHaveText(loggedInUserId)
   await page.reload()
   await expect(page.getByTestId('user-id')).toHaveText(loggedInUserId)
+})
+
+test('시나리오 4: 로그아웃하면 로그인 화면으로 안내되고, 새로고침해도 로그인한 사용자만 볼 수 있는 화면 주소로 직접 가도 로그아웃 상태다', async ({
+  page,
+  context,
+}) => {
+  await login(page, USER.email, USER.password)
+  await expect(page.getByTestId('user-id')).toHaveText(/^[0-9a-f-]{36}$/)
+
+  // 서버가 로그아웃에 정상 응답할 때까지 기다린다.
+  const [logoutResponse] = await Promise.all([
+    page.waitForResponse((response) => new URL(response.url()).pathname === '/api/auth/logout'),
+    page.getByRole('button', { name: '로그아웃' }).click(),
+  ])
+  expect(logoutResponse.status()).toBe(204)
+  await expectLoggedOut(page)
+  expect(await refreshTokenCookie(context)).toBeUndefined()
+
+  await page.reload()
+  await expectLoggedOut(page)
+
+  // 이 앱에서 로그인한 사용자만 볼 수 있는 화면은 로그인했을 때 첫 화면 주소(/)에 보인다.
+  await page.goto('/')
+  await expectLoggedOut(page)
 })
 
 test('시나리오 5: 틀린 비밀번호와 존재하지 않는 이메일은 같은 안내를 보여 준다', async ({ page }) => {
