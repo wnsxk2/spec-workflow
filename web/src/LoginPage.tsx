@@ -24,7 +24,13 @@ export function LoginPage({ notice }: { notice?: string }) {
       <form onSubmit={submit}>
         <label>
           이메일
-          <input type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <input
+            type="email"
+            autoComplete="username"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
         </label>
         <label>
           비밀번호

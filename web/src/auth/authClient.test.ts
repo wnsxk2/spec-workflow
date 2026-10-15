@@ -50,7 +50,9 @@ describe('화면 인증 모듈', () => {
   })
 
   it('로그인 차단은 공통 실패와 구분해 알린다', async () => {
-    server.on('POST', '/api/auth/login', () => json(429, { message: '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요' }))
+    server.on('POST', '/api/auth/login', () =>
+      json(429, { message: '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요' }),
+    )
 
     const result = await auth.login('user@example.com', 'correct-password')
 
@@ -216,7 +218,8 @@ describe('화면 인증 모듈', () => {
       server.on(
         'POST',
         '/api/auth/refresh',
-        () => new Promise((resolve) => (finishRotation = () => resolve(json(200, { accessToken: 'new-access-token' })))),
+        () =>
+          new Promise((resolve) => (finishRotation = () => resolve(json(200, { accessToken: 'new-access-token' })))),
       )
       for (const path of ['/api/a', '/api/b', '/api/c']) protectedResource('GET', path)
 
@@ -331,7 +334,11 @@ describe('화면 인증 모듈', () => {
     it('서버에 로그아웃을 요청하고, 응답을 기다리기 전에 메모리의 Access Token을 지우며, 로그아웃 상태를 알린다', async () => {
       await loggedIn()
       let finishLogout!: () => void
-      server.on('POST', '/api/auth/logout', () => new Promise((resolve) => (finishLogout = () => resolve(new Response(null, { status: 204 })))))
+      server.on(
+        'POST',
+        '/api/auth/logout',
+        () => new Promise((resolve) => (finishLogout = () => resolve(new Response(null, { status: 204 })))),
+      )
       server.on('GET', '/api/me', () => json(401, {}))
       const notified: string[] = []
       auth.subscribe(() => notified.push(auth.getState().status))
@@ -388,7 +395,11 @@ describe('화면 인증 모듈', () => {
     it('로그아웃하는 동안 진행 중이던 토큰 교환이 늦게 끝나도 로그인 상태로 되돌아가지 않는다', async () => {
       await loggedIn()
       let finishRotation!: () => void
-      server.on('POST', '/api/auth/refresh', () => new Promise((resolve) => (finishRotation = () => resolve(json(200, { accessToken: 'access-token-2' })))))
+      server.on(
+        'POST',
+        '/api/auth/refresh',
+        () => new Promise((resolve) => (finishRotation = () => resolve(json(200, { accessToken: 'access-token-2' })))),
+      )
       server.on('GET', '/api/me', () => json(401, {}))
       server.on('POST', '/api/auth/logout', () => new Response(null, { status: 204 }))
 

@@ -124,6 +124,7 @@ PostgreSQL의 개발 데이터는 Docker 볼륨(컨테이너를 다시 만들어
 | 서버 HTTP API 테스트 | `cd server && ./gradlew test` | Docker (Testcontainers가 PostgreSQL·Redis를 직접 띄운다) |
 | 화면 인증 모듈 테스트 | `cd web && npm test` | 없음 (가짜 서버 응답을 쓴다) |
 | 화면 타입 검사·린트 | `cd web && npm run typecheck && npm run lint` | 없음 |
+| 코드 모양 검사 (Prettier) | `cd web && npm run format:check`, `cd e2e && npm run format:check` | 없음. 고칠 때는 `npm run format` |
 | E2E | `cd e2e && npm test` | `docker compose up -d --wait`로 PostgreSQL·Redis를 켜 둔다 |
 
 - 서버 테스트는 시계(서버가 지금 시각을 아는 곳)를 테스트용으로 바꿔 끼워, 15분 같은 시간 규칙을 실제로 기다리지 않고 확인한다. Redis 장애는 테스트용 Redis 컨테이너를 일시 정지해 만든다.

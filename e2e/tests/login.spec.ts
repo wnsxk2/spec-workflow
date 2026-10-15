@@ -47,7 +47,10 @@ test('시나리오 1: 로그인하면 로그인한 사용자만 볼 수 있는 �
   expect(refreshTokenCookie).toMatchObject({ httpOnly: true, secure: true, sameSite: 'Strict', path: '/api/auth' })
 })
 
-test('시나리오 2: 로그인 후 새로고침해도 토큰 교환으로 로그인 상태가 유지되어 같은 화면이 보인다', async ({ page, context }) => {
+test('시나리오 2: 로그인 후 새로고침해도 토큰 교환으로 로그인 상태가 유지되어 같은 화면이 보인다', async ({
+  page,
+  context,
+}) => {
   await login(page, USER.email, USER.password)
   const userId = page.getByTestId('user-id')
   await expect(userId).toHaveText(/^[0-9a-f-]{36}$/)
