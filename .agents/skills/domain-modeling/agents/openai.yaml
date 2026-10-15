@@ -1,0 +1,3 @@
+interface:
+  display_name: "도메인 모델링"
+  short_description: "프로젝트의 도메인 용어집과 설계 결정 기록을 구축하고 다듬습니다"

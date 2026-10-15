@@ -1,0 +1,6 @@
+interface:
+  display_name: "엔지니어링 스킬 설정"
+  short_description: "엔지니어링 스킬에 필요한 이슈 트래커와 도메인 문서 구조를 설정합니다"
+
+policy:
+  allow_implicit_invocation: false

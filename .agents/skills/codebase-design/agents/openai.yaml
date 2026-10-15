@@ -1,0 +1,3 @@
+interface:
+  display_name: "코드베이스 설계"
+  short_description: "깊은 모듈과 인터페이스, 시임을 중심으로 코드 구조를 설계합니다"
