@@ -1,0 +1,31 @@
+# 연결 정보와 비밀 키는 실행 환경(환경 변수)으로 받는다. 이름과 용도는 저장소 루트의 README.md와 .env.example 참고.
+spring:
+  application:
+    name: spec-workflow-server
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:app}
+    username: ${POSTGRES_USER:app}
+    password: ${POSTGRES_PASSWORD:}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      database: ${REDIS_DATABASE:0}
+      timeout: 2s
+      connect-timeout: 2s
+  flyway:
+    locations: classpath:db/migration
+
+auth:
+  jwt:
+    # 값이 없거나 32자보다 짧으면 서버가 시작되지 않는다.
+    secret: ${AUTH_JWT_SECRET:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-components: always
